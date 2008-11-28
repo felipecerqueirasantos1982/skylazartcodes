@@ -326,9 +326,6 @@ main (int argc, char ** argv)
 	found = 0;
 
 	do {
-		memset (buffer, 0, sizeof (buffer));
-		memset (result, 0, sizeof (result));
-
 		if ((expect_shellcode_addr & 0xff000000) >>24 == 0 ||
 		    (expect_shellcode_addr & 0x00ff0000) >>16 == 0 ||
 		    (expect_shellcode_addr & 0x0000ff00) >> 8 == 0 ||
@@ -338,6 +335,10 @@ main (int argc, char ** argv)
 			expect_shellcode_addr++;
 			continue;
 		}
+
+		memset (buffer, 0, sizeof (buffer));
+		memset (result, 0, sizeof (result));
+
 
 		fprintf (stderr, "\r>> Trying 0x%08x, [%d] steps.", expect_shellcode_addr, ++total_shellcode_addr_retries);
 		
