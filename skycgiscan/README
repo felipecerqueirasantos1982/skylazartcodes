@@ -1,0 +1,29 @@
+Private CGI Scan, Do Not Distribute!
+skycgiscan 0.1 beta
+by skylazart - Jun/2005
+
+Version 0.1 beta
+
+
+First steps:
+
+Open skycgiscan.c and optimize create_threads ().
+bash$ make
+
+Using:
+
+./skycgiscan or
+nohup ./skycgiscan > log1 2> log2 &
+
+In other terminal
+./client 127.0.0.1/32 (for a single host scanning)
+./client 200.0.0.0/24
+./client 200.0.0.0/8
+./client - (for stdin input scanning)
+
+You can use FQDN:
+./client www.foo.org/24
+
+
+See the cgi logs into cgi.log
+
