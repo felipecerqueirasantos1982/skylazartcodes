@@ -727,8 +727,3 @@ int main (int argc, char ** argv)
 }
 
 
-// gauntlet.cks.co.za
-// 143.107.207.170
-// mail.santamaria.ind.br
-// www.durbellgroup.co.za
-// 200.199.220.26
