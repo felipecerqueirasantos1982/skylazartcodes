@@ -9,6 +9,9 @@ class Bitmap:
         for i in range (0, 63):
             self.vectorBitmap[i] = '0'
 
+    def resetAll (self):
+        self.bitmap = 0
+
     def setBit (self, position):
         value = 1 << (64 - position)
         self.bitmap |= value
@@ -26,10 +29,13 @@ class Bitmap:
     def getBitmapVector (self):
         bitmask = 0
 
-        for bitcheck in range (1, 63):
+        for bitcheck in range (1, 64):
             bitmask = 1 << (64 - bitcheck)
             if (self.bitmap & bitmask):
                 self.vectorBitmap[bitcheck-1] = '1'
+            else:
+                self.vectorBitmap[bitcheck-1] = '0'
+
         return (self.vectorBitmap)
         
 
@@ -64,4 +70,10 @@ print 'Valor em hexa: ', x.getBitmalHexStringValue ()
 print x.getBitmapVector ()
 
 
+
+print "Resetando..."
+x.resetAll ()
+print 'Valor em decimal: ', x.getBitmapDecimalValue ()
+print 'Valor em hexa: ', x.getBitmalHexStringValue ()
+print x.getBitmapVector ()
 
