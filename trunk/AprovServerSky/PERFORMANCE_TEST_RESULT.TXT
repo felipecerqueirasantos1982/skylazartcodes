@@ -1,0 +1,27 @@
+Test with a single core2duo 2.0 CPU:
+
+asks: 156 total,   3 running, 153 sleeping,   0 stopped,   0 zombie
+Cpu(s): 54.7%us,  2.8%sy,  0.0%ni, 42.4%id,  0.0%wa,  0.0%hi,  0.0%si,  0.0%st
+Mem:   2052624k total,  1803104k used,   249520k free,   649368k buffers
+Swap:   248996k total,        0k used,   248996k free,   744104k cached
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                                         
+ 8270 skylazar  20   0  3340 2068  468 R  100  0.1   0:33.28 aprovserver                                                                                     
+ 2943 root      20   0  354m  43m  16m S    8  2.2  18:08.87 Xorg                                                                                            
+ 3764 skylazar  20   0  384m 156m  29m S    4  7.8  22:47.71 firefox                                                                                         
+
+skylazart@skylazart-laptop:~/mines/skylazartcodes/AprovServerSky$ time ./aprovserver 
+Loaded 846 regular expressions...
+Total of queries: 1000000
+
+real	0m38.116s
+user	0m37.674s
+sys	0m0.040s
+skylazart@skylazart-laptop:~/mines/skylazartcodes/AprovServerSky$ 
+
+It is the same of 1000000/38:
+	26315 TPS!!!!
+
+:-)
+
+
